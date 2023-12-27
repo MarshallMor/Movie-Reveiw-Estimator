@@ -14,11 +14,11 @@ from sklearn.metrics import mean_squared_error
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
+import pickle
 import re
 import nltk
-#nltk.download('stopwords')
-nltk.download('punkt')
-nltk.download('wordnet')
+import os
+
 #Global values
 Logo = ctk.CTkImage(dark_image= Image.open("Images/Logo.png"), size=(200,100))
 DarkLogo = ctk.CTkImage(dark_image= Image.open("Images/LogoDark.png"), size=(200,100))
@@ -33,6 +33,8 @@ search_path = "Models/file.txt"
 default_font = "Roboto"
 default_font_size = 15
 Score = 21
+sentiment_pos = 0.0
+
 #Time
 
 class MyFrame(ctk.CTkFrame):
@@ -48,7 +50,7 @@ class StartWindow(ctk.CTk):
         super().__init__()
         self.configure(fg_color = Basic_Background_ColorL)
         self.iconbitmap("Images/Icon.ico")
-        self.geometry("315x315")# size
+        self.geometry("340x315")# size
         self.title("Review Estimaor Start")#title
 
         self.banner = ctk.CTkLabel(self, image = Logo, text ="")
@@ -56,7 +58,7 @@ class StartWindow(ctk.CTk):
         
 
 
-        self.Message = ctk.CTkLabel (self, fg_color = (Basic_Background_ColorL, Basic_Background_ColorD), text_color= (Basic_Font_ColorL, Basic_Font_ColorD),font = ("Roboto",15) ,text = "")
+        self.Message = ctk.CTkLabel (self, fg_color = (Basic_Background_ColorL, Basic_Background_ColorD), text_color= (Basic_Font_ColorL, Basic_Font_ColorD),font = ("Roboto",15) ,text = "                                  ")
         self.Message.grid(row = 3, column = 2,sticky = "ew", padx = 10, pady =10)
         
         self.progressbar = ctk.CTkProgressBar(master=self,mode = "determinate", determinate_speed = 1 )
@@ -64,7 +66,7 @@ class StartWindow(ctk.CTk):
 
         self.progressbar.set(0)
     
-        self.Startbutton = ctk.CTkButton(self,fg_color = (Basic_Background_ColorL, Basic_Background_ColorD), text_color= (Basic_Font_ColorL, Basic_Font_ColorD), height= 10, width = 10 , text="Start", command =self.start)
+        self.Startbutton = ctk.CTkButton(self,fg_color = (Basic_Background_ColorL, Basic_Background_ColorD), text_color= (Basic_Font_ColorL, Basic_Font_ColorD), height= 10, width = 10 , text="Start", command =self.start_check)
         self.Startbutton.grid(row = 4, column = 2, sticky = "ew", padx = 5, pady = 5)
         
         self.modebutton = ctk.CTkButton(self, image = LightMode, fg_color = (Basic_Background_ColorL, Basic_Background_ColorD), height= 10, width = 10 , text="", command =self.changemode)
@@ -75,6 +77,18 @@ class StartWindow(ctk.CTk):
     
     def exitroot(self):
         self.destroy()
+    
+    def bar(self):
+        n = 500
+        iter_step = 1/n
+        progress_step = iter_step
+        self.progressbar.start()
+        
+        for x in range(500):
+            self.progressbar.set(progress_step)
+            progress_step += iter_step
+            self.update_idletasks()
+        self.progressbar.stop()
 
     def changemode(self):
         if self.modebutton.cget("image") == LightMode:
@@ -88,12 +102,116 @@ class StartWindow(ctk.CTk):
             ctk.set_appearance_mode("light")
             self.banner.configure(image = Logo)
             self.configure(fg_color = Basic_Background_ColorL)
-    def start(self):
-        self.Startbutton.configure(state = "disabled")
-        self.Exitbutton.configure(state = "disabled")
+    def start_check(self):
+    
+        if os.path.isfile('./model_log_reg') == True and os.path.isfile('./model_tfidf') == True:
+            self.Message.configure(text = "The model number 1 is saved")
+            sleep(2)
+        else:
+            semanlysis_dataset = pd.read_csv("IMDB Dataset.csv")
+            # Split the data
+            train, test = train_test_split(semanlysis_dataset, test_size=0.25, train_size=.75, random_state=42)
+
+            # Define features and labels
+            train_x, train_y = train['review'], train['sentiment']
+            test_x, test_y = test['review'], test['sentiment']
+
+            # TF-IDF vectorization
+            tfidf = TfidfVectorizer(stop_words='english')
+            train_x_vector = tfidf.fit_transform(train_x)
+            test_x_vector = tfidf.transform(test_x)
+
+            with open ('model_tfidf', 'wb') as files:
+                pickle.dump(tfidf, files)
+            # Define and train the model
+            log_reg = LogisticRegression()
+            log_reg.fit(train_x_vector, train_y)
+
+            # Evaluate the model
+            accuracy = log_reg.score(test_x_vector, test_y)
+            print(f"Accuracy: {accuracy}")
+
+            # Make predictions
+            prediction = log_reg.predict(tfidf.transform(['I did not like this movie at all']))
+            print(prediction)
+
+
+            with open ('model_log_reg', 'wb') as files:
+                pickle.dump(log_reg, files)
+            self.Message.configure(text = "The model number 1 has been saved")
+        n = 500
+        iter_step = 1/n
+        progress_step = iter_step
+        self.progressbar.start()
+        for x in range(250):
+            self.progressbar.set(progress_step)
+            progress_step += iter_step
+            self.update_idletasks()
+        self.progressbar.stop()
+        if os.path.isfile('./model_sentiment_values') == True:
+            self.Message.configure(text = "The model number 2 is saved")
+            sleep(2)
+        else:
+            # Load the data
+            rotten_tomatoes_reviews_adjusted = pd.read_csv('Rotten_Tomato_Sentiment.csv')
+
+            # Drop rows with missing values in relevant columns
+            rotten_tomatoes_reviews_adjusted = rotten_tomatoes_reviews_adjusted.dropna(subset=['sentiment', 'neg_count', 'pos_count', 'total_len', 'predicted_sentiment', 'review_score'])
+
+            # Split the data
+            train, test = train_test_split(rotten_tomatoes_reviews_adjusted, test_size=0.25, train_size=0.75, random_state=42)
+
+            # Define features and labels
+            feature_cols = ['sentiment', 'neg_count', 'pos_count', 'total_len', 'predicted_sentiment']
+            train_y = train['review_score']
+            test_y = test['review_score']
+
+            # Define additional features
+            train_x_other = train[feature_cols].reset_index(drop=True)
+            test_x_other = test[feature_cols].reset_index(drop=True)
+
+            # Define and train the model (using Linear Regression for regression task)
+            linear_reg = LinearRegression()
+            linear_reg.fit(train_x_other, train_y)
+
+            # Evaluate the model
+            predictions = linear_reg.predict(test_x_other)
+            mse = mean_squared_error(test_y, predictions)
+            print(f"Mean Squared Error: {mse}")
+
+            with open ('model_sentiment_values', 'wb') as files:
+                    pickle.dump(linear_reg, files)
+            self.Message.configure(text = "The model number 2 has been saved")
+        self.progressbar.start()
+        for x in range(250):
+            self.progressbar.set(progress_step)
+            progress_step += iter_step
+            self.update_idletasks()
+        self.progressbar.stop()
+        MainWindow(self)
+        self.withdraw()
+    """
+    def threading_start(self):
+        # Start the start_check thread
+        start_check_thread = threading.Thread(target=self.start_check, name='start_check_thread')
+        start_check_thread.start()
+
+        # Schedule the bar method to run after the start_check method completes
+        self.after(100, self.run_bar_thread)
+
+    def run_bar_thread(self):
+        # Start the bar thread
+        bar_thread = threading.Thread(target=self.bar, name='bar_thread')
+        bar_thread.start()
+
+        # Wait for the bar thread to complete
+        bar_thread.join()
+
+        # After the bar thread is done, show the MainWindow
         MainWindow(self)
         self.withdraw()
 
+    """
         
 
 
@@ -196,9 +314,12 @@ class MainWindow(ctk.CTkToplevel):
         self.text_area.delete("1.0", "end")
 
     def analyze_sentiment(self, comment: str) -> pd.DataFrame:
+        nltk.download('stopwords')
+        nltk.download('punkt')
+        nltk.download('wordnet')
         lemma = WordNetLemmatizer()
         stop_words = stopwords.words('english')
-
+        global sentiment_pos
         def text_prep(x: str) -> list:
             corp = str(x).lower() 
             corp = re.sub('[^a-zA-Z]+',' ', corp).strip() 
@@ -229,10 +350,12 @@ class MainWindow(ctk.CTkToplevel):
 
         # Compute sentiment score
         df['sentiment'] = round((df['pos_count'] - df['neg_count']) / df['total_len'], 2)
+        df['predicted_sentiment'] = sentiment_pos
 
         return df
     def train_thread(self):
         # Load the data
+        """
         rotten_tomatoes_reviews_adjusted = pd.read_csv('Rotten_Tomato_Sentiment.csv')
 
         # Drop rows with missing values in relevant columns
@@ -258,14 +381,15 @@ class MainWindow(ctk.CTkToplevel):
         predictions = linear_reg.predict(test_x_other)
         mse = mean_squared_error(test_y, predictions)
         print(f"Mean Squared Error: {mse}")
-
+        """
+        feature_cols = ['sentiment', 'neg_count', 'pos_count', 'total_len', 'predicted_sentiment']
+        with open('model_sentiment_values' , 'rb') as f:
+            linear_reg = pickle.load(f)
         # Make predictions for a sample review
         review = self.text_area.get("1.0", "end - 1 chars")
-        sample_df = self.analyze_sentiment(review)
-        sample_sentiment = sample_df['sentiment'][0]
-        sample_review_features = pd.DataFrame([[sample_sentiment, 0]], columns=feature_cols)
-        prediction = linear_reg.predict(sample_review_features)
-        self.sentimentscore.configure( text = f"Sentiment Score - {sample_sentiment}")
+        sample_df = self.analyze_sentiment(review)[feature_cols]
+        prediction = linear_reg.predict(sample_df)
+        self.sentimentscore.configure( text = f"Sentiment Score - {prediction}")
         self.length.configure( text = f"Length - {sample_df['total_len'][0]}")
         self.num_negative.configure( text = f"Num of Negative Words -  {sample_df['neg_count'][0]}")
         self.num_positive.configure( text = f"Num of Positive Words - {sample_df['pos_count'][0]}")
@@ -275,31 +399,40 @@ class MainWindow(ctk.CTkToplevel):
 
     def estimate_thread(self):
         text = 	self.text_area.get("1.0", "end - 1 chars")
-        semanlysis_dataset = pd.read_csv("IMDB Dataset.csv")
-        train, test = train_test_split(semanlysis_dataset, test_size=0.25, train_size=.75, random_state=42)
         
-        # Define features and labels
-        train_x, train_y = train['review'], train['sentiment']
-        test_x, test_y = test['review'], test['sentiment']
+        semanlysis_dataset = pd.read_csv("IMDB Dataset.csv")
+        # Split the data
+        train, test = train_test_split(semanlysis_dataset, test_size=0.25, train_size=.75, random_state=42)
 
-        # TF-IDF vectorization
-        tfidf = TfidfVectorizer(stop_words='english')
-        train_x_vector = tfidf.fit_transform(train_x)
+        with open('model_tfidf' , 'rb') as f:
+            tfidf = pickle.load(f)
+
+        # Define features and labels
+        test_x, test_y = test['review'], test['sentiment']
         test_x_vector = tfidf.transform(test_x)
 
-        # Define and train the model
-        log_reg = LogisticRegression()
-        log_reg.fit(train_x_vector, train_y)
-        accuracy = log_reg.score(test_x_vector, test_y)
-        print(f"Accuracy: {accuracy}")
-        print("Train worked")
-        prediction = log_reg.predict(tfidf.transform([text]))
-        print(prediction)
+        # load saved model
+        with open('model_log_reg' , 'rb') as f:
+            semanlysis_Pos_Neg = pickle.load(f)
 
-        # Make predictions using the loaded model
-        self.sentimentaccuracy.configure(text = f"Sentiment Accuracy - {accuracy}")
+        
+        # check prediction
+        prediction = semanlysis_Pos_Neg.predict(tfidf.transform([text])) # similar
+        accuracy = semanlysis_Pos_Neg.score(test_x_vector, test_y)
+        #self.sentimentaccuracy.configure(text = f"Sentiment Accuracy - {accuracy}")
         self.sentimentvar.configure(text =  f"Sentiment - {prediction}")
-        #self.Score.configure()
+        self.sentimentaccuracy.configure(text = f"Accuracy - {accuracy}")
+        
+        global sentiment_pos
+        if prediction == "positive":
+            sentiment_pos = 1.0
+            print("Phrase is positive")
+        elif prediction == "negative":
+            sentiment_pos = 0.0
+            print("Phrase is negative")
+        else: 
+            print(f"Didn't work. value is {prediction} with value {sentiment_pos}")
+
     def estimate(self):
         self.estimate_thread()
         self.train_thread()
